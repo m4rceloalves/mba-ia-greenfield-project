@@ -1,17 +1,39 @@
 services:
   nestjs-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.dev
+    command: npm run start:dev
     ports:
       - 3000:3000
     volumes:
       - .:/home/node/app
+      - node-modules:/home/node/app/node_modules
     depends_on:
       db:
         condition: service_healthy
       mailpit:
         condition: service_started
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: npm run start:worker:dev
+    volumes:
+      - .:/home/node/app
+      - node-modules:/home/node/app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
 
   db:
     image: postgres:17
@@ -33,4 +55,40 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=streamtube
+      - MINIO_ROOT_PASSWORD=streamtube-secret
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 streamtube streamtube-secret;
+      mc mb --ignore-existing local/streamtube-videos;
+      mc mb --ignore-existing local/streamtube-thumbnails;
+      "
+
+volumes:
+  minio-data:
+  node-modules:
