@@ -110,6 +110,24 @@ describe('exportSpec (integration)', () => {
     }
   });
 
+  it('keeps public video read endpoints without access-token security', () => {
+    const paths = document.paths as Record<
+      string,
+      Record<string, Record<string, unknown>>
+    >;
+    const publicOperations = [
+      paths['/videos/{publicId}']?.get,
+      paths['/videos/{publicId}/stream']?.get,
+      paths['/videos/{publicId}/download']?.get,
+      paths['/videos/{publicId}/thumbnail']?.get,
+    ];
+
+    for (const operation of publicOperations) {
+      expect(operation).toBeDefined();
+      expect(operation?.security).toBeUndefined();
+    }
+  });
+
   it('all auth endpoints have a non-empty summary', () => {
     const paths = document.paths as Record<
       string,

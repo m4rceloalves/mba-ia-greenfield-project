@@ -1,0 +1,39 @@
+import { Test } from '@nestjs/testing';
+import { ConfigModule } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { RefreshToken } from '../auth/entities/refresh-token.entity';
+import { VerificationToken } from '../auth/entities/verification-token.entity';
+import { Channel } from '../channels/entities/channel.entity';
+import queueConfig from '../config/queue.config';
+import storageConfig from '../config/storage.config';
+import videoConfig from '../config/video.config';
+import { createTestDataSource } from '../test/create-test-data-source';
+import { User } from '../users/entities/user.entity';
+import { Video } from './entities/video.entity';
+import { VIDEO_PROCESSING_QUEUE } from './video-processing-queue.constants';
+import { VideosModule } from './videos.module';
+
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
+
+describe('VideosModule', () => {
+  it('should compile with TypeOrmModule.forFeature([Video])', async () => {
+    const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          ignoreEnvFile: true,
+          isGlobal: true,
+          load: [queueConfig, storageConfig, videoConfig],
+        }),
+        TypeOrmModule.forRoot(createTestDataSource(ALL_ENTITIES).options),
+        VideosModule,
+      ],
+    })
+      .overrideProvider(getQueueToken(VIDEO_PROCESSING_QUEUE))
+      .useValue({ add: jest.fn(), close: jest.fn() })
+      .compile();
+
+    expect(module).toBeDefined();
+    await module.close();
+  }, 30000);
+});

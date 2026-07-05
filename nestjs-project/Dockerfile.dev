@@ -1,9 +1,16 @@
 FROM node:25.6.0-slim
 
-RUN apt update && apt install -y procps curl
+RUN apt update \
+    && apt install -y --no-install-recommends procps curl ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /home/node/app
+RUN chown -R node:node /home/node/app
+
+COPY --chown=node:node package*.json ./
 
 USER node
 
-CMD [ "tail", "-f", "/dev/null" ] 
+RUN npm ci
+
+CMD [ "npm", "run", "start:dev" ]

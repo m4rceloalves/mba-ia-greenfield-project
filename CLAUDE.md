@@ -12,7 +12,7 @@ This is a monorepo with two main areas:
 
 - `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
 - `docs/` — Project documentation, architecture diagrams, and planning.
-- `next-frontend/` (Next.js) — not yet initialized
+- `next-frontend/` — Frontend Next.js initialized, but video UI is outside Phase 03 scope
 
 ## Architecture (C4 Container Diagram)
 
@@ -23,7 +23,7 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (Redis/BullMQ) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
 
 ## Docker Networking
@@ -36,6 +36,38 @@ Inside a container, `localhost` refers to the container itself, not the host mac
 - **Wrong:** `DB_HOST=localhost`
 
 This applies to all environment variables, configuration files, and code that references service hosts.
+
+## Phase 03 Video Module
+
+The backend includes a `videos/` module for upload and processing. The API uses direct multipart upload to S3-compatible object storage, not full-file upload through the NestJS process.
+
+Runtime services:
+
+- `redis` — BullMQ broker for the `video-processing` queue.
+- `minio` — local S3-compatible storage.
+- `minio-init` — creates `streamtube-videos` and `streamtube-thumbnails`.
+- `video-worker` — dedicated FFmpeg/ffprobe worker included in the default Docker Compose runtime.
+
+Important endpoints:
+
+- `POST /videos/uploads` — authenticated upload initiation; creates a `draft` video row.
+- `POST /videos/uploads/:videoId/parts` — authenticated owner-only presigned multipart part URLs.
+- `POST /videos/uploads/:videoId/complete` — authenticated owner-only upload completion; moves to `processing` and queues `process-video`.
+- `DELETE /videos/uploads/:videoId` — authenticated owner-only draft abort.
+- `GET /videos/uploads/:videoId/status` — authenticated owner-only lifecycle and processing error details.
+- `GET /videos/:publicId` — public metadata for `ready` videos only.
+- `GET /videos/:publicId/thumbnail` — public thumbnail image for `ready` videos that have a generated thumbnail.
+- `GET /videos/:publicId/stream` — public streaming for `ready` videos, including HTTP Range support and `206 Partial Content`.
+- `GET /videos/:publicId/download` — public attachment download for `ready` videos.
+
+Inside Docker, use service names in env vars:
+
+```dotenv
+STORAGE_ENDPOINT=http://minio:9000
+QUEUE_REDIS_HOST=redis
+DB_HOST=db
+MAIL_HOST=mailpit
+```
 
 ## Working Principles
 
